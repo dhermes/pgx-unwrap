@@ -23,24 +23,17 @@ import (
 	unwrap "github.com/dhermes/pgx-unwrap"
 )
 
+const (
+	connectionURL  = "..."
+	postgresqlRole = "..."
+)
+
 func TestExtractTx(t *testing.T) {
 	t.Parallel()
 	assert := testifyrequire.New(t)
 
-	pool, err := sql.Open("pgx", "postgres://...")
-	assert.Nil(err)
-	t.Cleanup(func() {
-		err := pool.Close()
-		assert.Nil(err)
-	})
-
 	ctx := context.Background()
-	tx, err := pool.BeginTx(ctx, nil)
-	assert.Nil(err)
-	t.Cleanup(func() {
-		err := tx.Rollback()
-		assert.Nil(err)
-	})
+	tx := startTx(ctx, t)
 
 	unwrapped, err := unwrap.ExtractTx(tx)
 	assert.Nil(err)
@@ -50,5 +43,32 @@ func TestExtractTx(t *testing.T) {
 	searchPath := ""
 	err = row.Scan(&searchPath)
 	assert.Nil(err)
-	assert.Equal("...", searchPath)
+	assert.Equal(postgresqlRole, searchPath)
+}
+
+func startPool(ctx context.Context, t *testing.T) *sql.DB {
+	pool, err := sql.Open("pgx", connectionURL)
+	testifyrequire.Nil(t, err)
+	t.Cleanup(func() {
+		err := pool.Close()
+		testifyrequire.Nil(t, err)
+	})
+
+	err = pool.PingContext(ctx)
+	testifyrequire.Nil(t, err)
+
+	return pool
+}
+
+func startTx(ctx context.Context, t *testing.T) *sql.Tx {
+	pool := startPool(ctx, t)
+
+	tx, err := pool.BeginTx(ctx, nil)
+	testifyrequire.Nil(t, err)
+	t.Cleanup(func() {
+		err := tx.Rollback()
+		testifyrequire.Nil(t, err)
+	})
+
+	return tx
 }
